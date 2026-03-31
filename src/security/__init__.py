@@ -75,6 +75,7 @@ INJECTION_PATTERNS = [
     # Jailbreak patterns
     (r"(?i)(dan|jailbreak|bypass|circumvent)\s+(safety|filter|restriction|guard|limit)", "jailbreak"),
     (r"(?i)act\s+as\s+(if\s+)?(you\s+(can|were|are)\s+)?(unrestricted|unfiltered|uncensored)", "jailbreak"),
+    (r"(?i)bypass\s+(all\s+)?(safety|filter|restriction|guard|limit)", "jailbreak"),
 
     # Social engineering
     (r"(?i)this\s+(is|was)\s+(a|an)\s+(test|simulation|exercise|drill|debug)", "social_engineering"),
@@ -179,7 +180,13 @@ def _sanitize_content(content: str, threats: list[str]) -> str:
 
     # Remove common injection markers
     sanitized = re.sub(
-        r"\[(system|developer|admin)\s*(override|mode|instruction)\s*\]",
+        r"\[(system|developer|admin)\s*(override|mode|instruction|message)?\s*\]",
+        "[REDACTED]",
+        sanitized,
+        flags=re.IGNORECASE,
+    )
+    sanitized = re.sub(
+        r"\[(system|developer|admin)\s*(override|mode|instruction|message)?\]\s*:",
         "[REDACTED]",
         sanitized,
         flags=re.IGNORECASE,

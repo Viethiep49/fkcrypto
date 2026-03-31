@@ -10,6 +10,7 @@
 - [x] **ARCHITECTURE.md** - System architecture, design patterns, data flow, LangGraph workflow
 - [x] **GETTING_STARTED.md** - Installation, configuration, first run, prerequisites
 - [x] **AGENTS.md** - Detailed agent documentation (TechnicalAnalyst, NewsSentiment, MarketMonitor, RiskGuardian, DecisionEngine)
+- [x] **FEATURES.md** - All new features: XAI, Alpha Seeker, Dynamic Sizing, HITL, Replay, Security
 
 ## Medium Priority
 
@@ -34,6 +35,7 @@
 | docs/DEPLOYMENT.md | ✅ Complete | Docker setup, production deployment, monitoring, security |
 | docs/BACKTESTING.md | ✅ Complete | Backtesting system, metrics, simulation, usage examples |
 | docs/DEVELOPMENT.md | ✅ Complete | Testing, linting, code style, contributing guidelines |
+| docs/FEATURES.md | ✅ Complete | 6 new features with architecture, API, testing examples |
 
 ## Notes
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import structlog
 
@@ -452,7 +452,7 @@ class AlphaSeekerAgent(BaseAgent):
             reasoning=reasoning,
         )
 
-    def _determine_action_from_event(self, event: AlphaEvent) -> str:
+    def _determine_action_from_event(self, event: AlphaEvent) -> Literal["buy", "sell", "hold"]:
         """Determine buy/sell/hold based on event type."""
         bullish_events = ("listing", "partnership", "mainnet", "upgrade")
         bearish_events = ("hack", "exploit", "delisting", "regulation")

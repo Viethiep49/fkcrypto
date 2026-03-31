@@ -30,13 +30,12 @@ class LLMGateway:
 
         # Security middleware
         security_config = config.get("security", {})
+        threat_level_str = security_config.get("auto_block_threat_level", "high")
         self.security = SecurityMiddleware(
             max_injection_alerts_per_hour=security_config.get(
                 "max_injection_alerts_per_hour", 10,
             ),
-            auto_block_threat_level=ThreatLevel(
-                security_config.get("auto_block_threat_level", "high"),
-            ),
+            auto_block_threat_level=ThreatLevel[threat_level_str.upper()],
         )
 
         logger.info(

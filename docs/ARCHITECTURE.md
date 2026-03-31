@@ -38,6 +38,8 @@
   - [11.1 Prometheus Metrics](#111-prometheus-metrics)
 - [12. Backtesting Architecture](#12-backtesting-architecture)
 - [13. Security & Safety](#13-security--safety)
+  - [13.1 Prompt Injection Protection](#131-prompt-injection-protection)
+  - [13.2 Security Middleware](#132-security-middleware)
 - [14. Deployment Topology](#14-deployment-topology)
 
 ---
@@ -58,6 +60,9 @@ The system is designed so that the **same Decision Engine runs identically** in 
 | 2 | **Agents emit signals, not decisions** | Each agent produces normalized `Signal` objects. A central `DecisionEngine` aggregates and decides. |
 | 3 | **Independent safety boundaries** | A separate `RiskEngine` and `ExecutionService` validate every order before it reaches Freqtrade. |
 | 4 | **Everything must be backtestable** | The same Decision Engine runs on historical data for backtesting and live data for trading. |
+| 5 | **Explainability by default** | Every signal carries structured reasoning (`Reasoning` dataclass) — no black box decisions. |
+| 6 | **Human-in-the-loop ready** | Approval requests can gate execution — the bot proposes, the human decides. |
+| 7 | **Security-first external content** | All external content (news, tweets, web) is scanned for prompt injection before LLM processing. |
 
 ---
 
