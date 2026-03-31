@@ -1,0 +1,41 @@
+name: portfolio-rebalancer
+version: "1.0"
+description: "Chiến lược quản lý portfolio — tự động rebalance dựa trên target allocation và drift threshold"
+category: portfolio-management
+timeframes: ["4h", "1d"]
+pairs: ["ALL"]
+
+weight: 0.0  # Không tạo signals, chỉ quản lý portfolio
+
+# Target allocation
+target_allocation:
+  BTC: 0.40
+  ETH: 0.30
+  SOL: 0.15
+  USDT: 0.15
+
+# Khi nào trigger rebalance
+rebalance:
+  trigger: "drift"
+  drift_threshold: 0.05  # 5% drift từ target
+  min_rebalance_usd: 50   # Minimum trade size
+  max_trades_per_rebalance: 5
+
+# DCA mode (optional)
+dca:
+  enabled: false
+  interval: "weekly"
+  amount_usd: 100
+  distribution:
+    BTC: 0.40
+    ETH: 0.30
+    SOL: 0.15
+    USDT: 0.15
+
+# Risk limits
+risk:
+  max_single_asset_pct: 0.50
+  min_stable_pct: 0.10
+  max_correlation: 0.8
+
+enabled: true

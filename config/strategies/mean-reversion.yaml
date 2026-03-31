@@ -1,0 +1,68 @@
+name: mean-reversion
+version: "1.0"
+description: "Giao dịch mean reversion — mua khi giá oversold, bán khi overbought, dựa trên Bollinger Bands và RSI"
+category: mean-reversion
+timeframes: ["15m", "1h", "4h"]
+pairs: ["BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT"]
+
+weight: 0.25
+
+entry:
+  conditions:
+    - indicator: BollingerBands
+      params: {period: 20, std: 2.0}
+      rule: "price <= lower_band"
+      label: "Price at or below lower BB"
+
+    - indicator: RSI
+      params: {period: 14}
+      rule: "value < 30"
+      label: "RSI oversold"
+
+    - indicator: Stochastic
+      params: {k: 14, d: 3}
+      rule: "k < 20 AND k > d"
+      label: "Stochastic oversold with bullish crossover"
+
+    - indicator: Volume
+      params: {period: 20}
+      rule: "current > sma * 1.5"
+      label: "Volume spike on reversal"
+
+  min_conditions: 2
+
+exit:
+  conditions:
+    - indicator: BollingerBands
+      params: {period: 20, std: 2.0}
+      rule: "price >= middle_band"
+      label: "Price reached middle BB"
+
+    - indicator: RSI
+      params: {period: 14}
+      rule: "value > 65"
+      label: "RSI approaching overbought"
+
+  min_conditions: 1
+
+risk:
+  stop_loss:
+    type: "fixed_pct"
+    value: 0.015
+  take_profit:
+    type: "bollinger_middle"
+  trailing_stop:
+    enabled: false
+
+confidence:
+  base: 0.5
+  boosters:
+    - condition: "RSI < 25"
+      bonus: 0.15
+    - condition: "price < lower_band * 0.99"
+      bonus: 0.10
+    - condition: "volume > sma * 2.0"
+      bonus: 0.10
+  max_confidence: 0.85
+
+enabled: true

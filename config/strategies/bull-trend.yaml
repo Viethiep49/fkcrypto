@@ -1,0 +1,77 @@
+name: bull-trend
+version: "1.0"
+description: "Giao dịch theo xu hướng tăng — mua khi MA xếp hàng bullish và RSI xác nhận momentum"
+category: trend-following
+timeframes: ["1h", "4h", "1d"]
+pairs: ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+
+# Weight trong Decision Engine
+weight: 0.35
+
+# Điều kiện vào lệnh
+entry:
+  conditions:
+    - indicator: EMA
+      params: {fast: 20, slow: 50}
+      rule: "fast > slow AND fast[1] <= slow[1]"  # EMA crossover
+      label: "EMA 20/50 bullish crossover"
+
+    - indicator: EMA
+      params: {fast: 50, slow: 200}
+      rule: "fast > slow"
+      label: "EMA 50/200 bullish alignment"
+
+    - indicator: RSI
+      params: {period: 14}
+      rule: "value > 50 AND value < 70"
+      label: "RSI bullish but not overbought"
+
+    - indicator: Volume
+      params: {period: 20}
+      rule: "current > sma * 1.2"
+      label: "Volume above average"
+
+  # Cần bao nhiêu điều kiện thỏa để trigger
+  min_conditions: 3
+
+# Điều kiện thoát lệnh
+exit:
+  conditions:
+    - indicator: EMA
+      params: {fast: 20, slow: 50}
+      rule: "fast < slow"
+      label: "EMA bearish crossover"
+
+    - indicator: RSI
+      params: {period: 14}
+      rule: "value < 40"
+      label: "RSI bearish momentum"
+
+  min_conditions: 1
+
+# Risk management
+risk:
+  stop_loss:
+    type: "atr"
+    multiplier: 2.0
+  take_profit:
+    type: "risk_reward"
+    ratio: 2.5
+  trailing_stop:
+    enabled: true
+    activation_pct: 0.03
+    trail_pct: 0.015
+
+# Confidence boosters
+confidence:
+  base: 0.6
+  boosters:
+    - condition: "volume > sma * 2.0"
+      bonus: 0.15
+    - condition: "price > EMA200"
+      bonus: 0.10
+    - condition: "ADX > 25"
+      bonus: 0.10
+  max_confidence: 0.95
+
+enabled: true

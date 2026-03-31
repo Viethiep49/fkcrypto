@@ -1,0 +1,74 @@
+name: scalping-ema
+version: "1.0"
+description: "Scalping ngắn hạn dựa trên EMA crossover + RSI confirmation trên timeframe nhỏ"
+category: scalping
+timeframes: ["1m", "3m", "5m"]
+pairs: ["BTC/USDT", "ETH/USDT"]
+
+weight: 0.20
+
+entry:
+  conditions:
+    - indicator: EMA
+      params: {fast: 9, slow: 21}
+      rule: "fast > slow AND fast[1] <= slow[1]"
+      label: "EMA 9/21 bullish crossover"
+
+    - indicator: RSI
+      params: {period: 7}
+      rule: "value > 50 AND value < 65"
+      label: "RSI bullish momentum"
+
+    - indicator: Volume
+      params: {period: 10}
+      rule: "current > sma * 1.3"
+      label: "Volume confirmation"
+
+    - indicator: Spread
+      params: {}
+      rule: "value < 0.001"
+      label: "Tight spread (low slippage)"
+
+  min_conditions: 3
+
+exit:
+  conditions:
+    - indicator: EMA
+      params: {fast: 9, slow: 21}
+      rule: "fast < slow"
+      label: "EMA bearish crossover"
+
+    - indicator: RSI
+      params: {period: 7}
+      rule: "value > 75"
+      label: "RSI overbought"
+
+  min_conditions: 1
+
+risk:
+  stop_loss:
+    type: "fixed_pct"
+    value: 0.005
+  take_profit:
+    type: "risk_reward"
+    ratio: 1.5
+  trailing_stop:
+    enabled: true
+    activation_pct: 0.003
+    trail_pct: 0.002
+
+confidence:
+  base: 0.50
+  boosters:
+    - condition: "volume > sma * 2.0"
+      bonus: 0.10
+    - condition: "trend_alignment_1h == bullish"
+      bonus: 0.10
+  max_confidence: 0.80
+
+# Scalping specific
+max_trades_per_hour: 5
+min_profit_pct: 0.003
+fee_impact_threshold: 0.001
+
+enabled: false  # Disabled by default — high risk

@@ -1,0 +1,94 @@
+name: news-sentiment
+version: "1.0"
+description: "Giao dịch dựa trên sentiment từ tin tức và social media — dùng LLM để phân tích cảm xúc thị trường"
+category: sentiment
+timeframes: ["1h", "4h"]
+pairs: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "DOGE/USDT"]
+
+weight: 0.20
+
+# Data sources cho sentiment analysis
+data_sources:
+  news:
+    - cryptopanic
+    - serpapi
+  social:
+    - lunarcrush
+    - twitter_trending
+
+# LLM prompt cho sentiment classification
+llm_prompt: |
+  Analyze the following crypto news and social media content.
+  Return a sentiment score from -1.0 (extremely bearish) to +1.0 (extremely bullish).
+
+  Consider:
+  1. Regulatory news (positive/negative)
+  2. Institutional adoption
+  3. Security breaches / hacks
+  4. Macro economic factors
+  5. Social media hype / fear
+
+  Output format:
+  - sentiment_score: float (-1.0 to 1.0)
+  - confidence: float (0.0 to 1.0)
+  - key_factors: list of strings
+  - summary: string (max 100 chars)
+
+entry:
+  conditions:
+    - indicator: SentimentScore
+      params: {source: "llm"}
+      rule: "value > 0.5"
+      label: "Strong bullish sentiment"
+
+    - indicator: SocialVolume
+      params: {source: "lunarcrush"}
+      rule: "change_24h > 50"
+      label: "Social volume spike > 50%"
+
+    - indicator: NewsRatio
+      params: {window: "24h"}
+      rule: "positive / total > 0.7"
+      label: "70%+ positive news"
+
+  min_conditions: 2
+
+exit:
+  conditions:
+    - indicator: SentimentScore
+      params: {source: "llm"}
+      rule: "value < -0.3"
+      label: "Sentiment turning bearish"
+
+    - indicator: FearGreedIndex
+      params: {source: "alternative.me"}
+      rule: "value > 75"
+      label: "Extreme greed (contrarian sell)"
+
+  min_conditions: 1
+
+risk:
+  stop_loss:
+    type: "fixed_pct"
+    value: 0.025
+  take_profit:
+    type: "risk_reward"
+    ratio: 2.0
+  trailing_stop:
+    enabled: false
+
+confidence:
+  base: 0.45
+  boosters:
+    - condition: "sentiment_score > 0.7"
+      bonus: 0.20
+    - condition: "multiple_sources_agree >= 3"
+      bonus: 0.15
+    - condition: "institutional_news == true"
+      bonus: 0.10
+  max_confidence: 0.80
+
+# News freshness
+news_max_age_hours: 24
+
+enabled: true

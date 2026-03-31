@@ -1,0 +1,44 @@
+FROM python:3.11-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+FROM base AS deps
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+FROM deps AS runtime
+
+RUN groupadd -r fkcrypto && useradd -r -g fkcrypto -d /app -s /sbin/nologin fkcrypto
+
+COPY pyproject.toml .
+COPY src/ ./src/
+COPY config/ ./config/
+COPY dashboard/ ./dashboard/
+
+RUN chown -R fkcrypto:fkcrypto /app
+
+USER fkcrypto
+
+EXPOSE 8000 9090
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+CMD ["python", "-m", "src.gateway"]

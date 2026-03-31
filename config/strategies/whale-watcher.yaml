@@ -1,0 +1,81 @@
+name: whale-watcher
+version: "1.0"
+description: "Theo dõi whale movements — phát hiện large wallet transfers, exchange inflows/outflows để dự đoán price action"
+category: on-chain
+timeframes: ["1h", "4h", "1d"]
+pairs: ["BTC/USDT", "ETH/USDT"]
+
+weight: 0.15
+
+# On-chain data sources
+data_sources:
+  - whale_alert_api
+  - glassnode
+  - cryptoquant
+
+entry:
+  conditions:
+    - indicator: ExchangeNetFlow
+      params: {window: "24h"}
+      rule: "value < -1000"  # Net outflow > 1000 BTC
+      label: "Significant exchange outflow"
+
+    - indicator: WhaleTransaction
+      params: {min_usd: 10000000}
+      rule: "count_24h > average * 2"
+      label: "Whale transaction spike"
+
+    - indicator: StablecoinSupply
+      params: {}
+      rule: "change_7d > 0"
+      label: "Stablecoin supply increasing (buying power)"
+
+    - indicator: ExchangeReserve
+      params: {}
+      rule: "change_7d < -0.05"
+      label: "Exchange reserves dropping 5%+"
+
+  min_conditions: 2
+
+exit:
+  conditions:
+    - indicator: ExchangeNetFlow
+      params: {window: "24h"}
+      rule: "value > 500"
+      label: "Exchange inflow spike"
+
+    - indicator: WhaleTransaction
+      params: {min_usd: 10000000}
+      rule: "large_sell_detected == true"
+      label: "Large whale sell detected"
+
+  min_conditions: 1
+
+risk:
+  stop_loss:
+    type: "atr"
+    multiplier: 2.5
+  take_profit:
+    type: "risk_reward"
+    ratio: 3.0
+  trailing_stop:
+    enabled: true
+    activation_pct: 0.05
+    trail_pct: 0.02
+
+confidence:
+  base: 0.40
+  boosters:
+    - condition: "exchange_outflow > 5000 BTC"
+      bonus: 0.20
+    - condition: "stablecoin_inflow > 1B USD"
+      bonus: 0.15
+    - condition: "whale_accumulation_days > 7"
+      bonus: 0.15
+  max_confidence: 0.85
+
+# On-chain specific
+min_confirmation_blocks: 3
+data_freshness_hours: 6
+
+enabled: false  # Requires paid data sources

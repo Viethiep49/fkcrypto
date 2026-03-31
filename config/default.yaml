@@ -1,0 +1,86 @@
+# FKCrypto — Default Configuration
+# Override with environment variables or custom YAML.
+
+llm:
+  provider: openai
+  model: gpt-4o-mini
+  fallback_model: gpt-3.5-turbo
+  temperature: 0.1
+  max_tokens: 500
+  timeout: 30
+  retries: 3
+
+data_sources:
+  ccxt:
+    exchange: binance
+    api_key: "${CCXT_API_KEY}"
+    secret: "${CCXT_SECRET}"
+    options:
+      defaultType: spot
+      enableRateLimit: true
+  coingecko:
+    api_key: "${COINGECKO_API_KEY}"
+    base_url: https://api.coingecko.com/api/v3
+  cryptopanic:
+    api_key: "${CRYPTOPANIC_API_KEY}"
+    base_url: https://cryptopanic.com/api/v1
+  lunarcrush:
+    api_key: "${LUNARCRUSH_API_KEY}"
+    base_url: https://api.lunarcrush.com/v4
+  serpapi:
+    api_key: "${SERPAPI_API_KEY}"
+
+trading:
+  pairs:
+    - BTC/USDT
+    - ETH/USDT
+    - SOL/USDT
+    - BNB/USDT
+    - XRP/USDT
+  timeframe: 1h
+  mode: paper
+
+risk:
+  max_positions: 5
+  risk_per_trade: 0.02
+  max_exposure: 0.5
+  stop_loss: 0.05
+  max_daily_loss: 0.05
+  max_drawdown: 0.15
+
+decision:
+  weights:
+    technical: 0.30
+    sentiment: 0.20
+    momentum: 0.20
+    risk: 0.15
+    ml: 0.10
+    on-chain: 0.05
+  thresholds:
+    buy: 0.6
+    sell: -0.6
+    min_confidence: 0.5
+
+execution:
+  freqtrade_url: "${FREQTRADE_API_URL}"
+  freqtrade_api_key: "${FREQTRADE_API_KEY}"
+  rate_limit: 10
+  dry_run: true
+
+schedule:
+  analyst_interval_minutes: 5
+  news_interval_minutes: 15
+  risk_check_interval_seconds: 30
+  portfolio_snapshot_interval_minutes: 60
+
+notifications:
+  telegram:
+    enabled: false
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    chat_id: "${TELEGRAM_CHAT_ID}"
+  discord:
+    enabled: false
+    webhook_url: "${DISCORD_WEBHOOK_URL}"
+  slack:
+    enabled: false
+    webhook_url: "${SLACK_WEBHOOK_URL}"

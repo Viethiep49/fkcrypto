@@ -1,0 +1,39 @@
+# FKCrypto — Notification Channel Configurations
+# Each channel defines its connection, priority level, and event triggers.
+
+telegram:
+  enabled: true
+  bot_token: "${TELEGRAM_BOT_TOKEN}"
+  chat_id: "${TELEGRAM_CHAT_ID}"
+  priority: high
+  triggers:
+    - trade
+    - alert
+    - kill_switch
+
+discord:
+  enabled: false
+  webhook_url: "${DISCORD_WEBHOOK_URL}"
+  priority: medium
+  triggers:
+    - trade_summary
+    - daily_report
+
+slack:
+  enabled: false
+  webhook_url: "${SLACK_WEBHOOK_URL}"
+  priority: high
+  triggers:
+    - system_alert
+    - error
+
+email:
+  enabled: false
+  sender: "${EMAIL_SENDER}"
+  password: "${EMAIL_PASSWORD}"
+  receivers:
+    - "${EMAIL_RECEIVER_1}"
+  priority: low
+  triggers:
+    - daily_report
+    - weekly_report
