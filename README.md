@@ -41,19 +41,28 @@ A hybrid multi-agent architecture that combines **deterministic technical analys
 | **Agents emit signals, not decisions** | Each agent produces normalized `Signal` objects. A central `DecisionEngine` aggregates and decides. |
 | **Independent safety boundaries** | A separate `RiskEngine` and `ExecutionService` validate every order before it reaches Freqtrade. |
 | **Everything must be backtestable** | The same `DecisionEngine` runs on historical data for backtesting and live data for trading. |
+| **Explainable by default** | Every signal carries structured reasoning — no black box decisions. |
+| **Human-in-the-loop ready** | Approval requests can gate execution — the bot proposes, you decide. |
+| **Security-first** | All external content is scanned for prompt injection before LLM processing. |
 
 ---
 
 ## Key Features
 
-- **Multi-agent system** — Technical Analyst, News Sentiment, Market Monitor, and Risk Guardian agents working in parallel
+- **Multi-agent system** — Technical Analyst, News Sentiment, Market Monitor, Risk Guardian, and Alpha Seeker agents working in parallel
 - **LangGraph-based orchestration** — Parallel agent execution with deterministic graph routing
 - **12+ technical indicators** — RSI, MACD, EMA, Bollinger Bands, ATR, Stochastic, ADX, Donchian Channels, and more
 - **LLM-powered sentiment analysis** — Real-time analysis of news articles and social media signals
+- **Alpha Seeker** — Hunts high-impact events (listings, whale movements, KOL tweets) that move prices before indicators react
+- **Explainable AI** — Every agent generates structured reasoning explaining "why" it made each signal
+- **Human-in-the-loop** — Approval requests with approve/reject buttons — you keep final control
+- **Dynamic position sizing** — Position sizes adjust based on signal convergence (agent agreement)
 - **Real-time anomaly detection** — Price spikes, volume anomalies, and flash crash detection
-- **Risk management** — Kill switch, drawdown monitoring, dynamic position sizing
+- **Prompt injection protection** — 20+ pattern detectors sanitize all external content before LLM processing
+- **Risk management** — Kill switch, drawdown monitoring, position limits
 - **Backtesting engine** — Realistic simulation with slippage, fees, and market impact
-- **Streamlit monitoring dashboard** — Real-time portfolio visualization and agent signal tracking
+- **Visual backtest replay** — Replay any past decision with full market context
+- **Streamlit monitoring dashboard** — Real-time portfolio visualization, agent reasoning, and approval panel
 - **Docker deployment** — 9-service stack: gateway, freqtrade, redis, postgres, dashboard, nginx, litellm, prometheus, grafana
 - **Prometheus metrics** — Full observability with Grafana dashboards and alerting
 - **Multi-channel notifications** — Telegram, Discord, and Slack integration
@@ -65,19 +74,21 @@ A hybrid multi-agent architecture that combines **deterministic technical analys
 ### Agent Execution Flow
 
 ```
-                    (parallel)
+                     (parallel)
 market_monitor ────────┐
 analyst      ──────────┼──→ decision ──→ execution ──→ END
 sentiment    ──────────┤
+alpha        ──────────┤
 risk         ──────────┘
 ```
 
 1. **Market Monitor** — Detects anomalies, regime changes, and market health signals
 2. **Technical Analyst** — Computes indicators and generates technical signals
 3. **Sentiment Agent** — Analyzes news/social media for market sentiment
-4. **Risk Guardian** — Validates risk boundaries and portfolio constraints
-5. **Decision Engine** — Aggregates all signals and produces a final trading decision
-6. **Execution Service** — Validates and routes orders to Freqtrade
+4. **Alpha Seeker** — Hunts high-impact events (listings, whales, KOLs)
+5. **Risk Guardian** — Validates risk boundaries and portfolio constraints
+6. **Decision Engine** — Aggregates all signals and produces a final trading decision
+7. **Execution Service** — Validates and routes orders to Freqtrade (with optional human approval)
 
 ### Signal Flow
 
