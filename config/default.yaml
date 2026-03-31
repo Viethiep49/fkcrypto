@@ -48,24 +48,96 @@ risk:
   max_daily_loss: 0.05
   max_drawdown: 0.15
 
+sentiment:
+  sources:
+    cryptopanic:
+      enabled: true
+      api_key: "${CRYPTOPANIC_API_KEY}"
+    serpapi:
+      enabled: true
+      api_key: "${SERPAPI_API_KEY}"
+    lunarcrush:
+      enabled: true
+      api_key: "${LUNARCRUSH_API_KEY}"
+  llm:
+    model: gpt-4o-mini
+    max_tokens: 500
+    temperature: 0.1
+  thresholds:
+    strong_bullish: 0.5
+    strong_bearish: -0.5
+    min_news_count: 3
+
+risk_guardian:
+  check_interval_sec: 30
+  limits:
+    max_drawdown_pct: 0.20
+    max_daily_loss_pct: 0.05
+    max_positions: 5
+    max_exposure_pct: 0.30
+    max_loss_per_position: 0.10
+  kill_switch:
+    enabled: true
+    auto_close_positions: true
+    manual_reset_required: true
+  volatility:
+    atr_spike_multiplier: 3.0
+  api_health:
+    max_consecutive_errors: 10
+
+database:
+  url: "${DATABASE_URL:sqlite:///fkcrypto.db}"
+
 decision:
   weights:
     technical: 0.30
     sentiment: 0.20
     momentum: 0.20
     risk: 0.15
+    alpha: 0.15
     ml: 0.10
     on-chain: 0.05
   thresholds:
     buy: 0.6
     sell: -0.6
     min_confidence: 0.5
+  confidence_boost:
+    agreement_bonus: 0.15
+    max_confidence: 0.95
+  explanation:
+    enabled: true
 
 execution:
   freqtrade_url: "${FREQTRADE_API_URL}"
   freqtrade_api_key: "${FREQTRADE_API_KEY}"
   rate_limit: 10
   dry_run: true
+  approval:
+    enabled: false
+    timeout_sec: 300
+
+alpha_seeker:
+  check_interval_sec: 60
+  sources:
+    exchange_news:
+      enabled: true
+    whale_alert:
+      enabled: false
+      api_key: ""
+    influencer:
+      enabled: false
+      bearer_token: ""
+  override:
+    can_override_technical: true
+    min_priority: "high"
+  influencers:
+    - "elonmusk"
+    - "VitalikButerin"
+    - "cz_binance"
+
+security:
+  max_injection_alerts_per_hour: 10
+  auto_block_threat_level: "high"
 
 schedule:
   analyst_interval_minutes: 5
