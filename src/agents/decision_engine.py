@@ -205,10 +205,25 @@ class DecisionEngine:
 
         try:
             result = await asyncio.wait_for(
-                self.llm_gateway.generate(prompt, max_tokens=200),
+                self.llm_gateway.chat_completion(
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a trading decision explainer. "
+                                "Generate a clear, concise human-readable explanation "
+                                "of why this decision was made. Keep it under 200 words."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.2,
+                    max_tokens=200,
+                ),
                 timeout=10.0,
             )
-            return result.strip() if result else "N/A"
+            content = result.get("content", "")
+            return content.strip() if content else "N/A"
         except TimeoutError:
             logger.warning("LLM explanation timed out", symbol=decision.symbol)
             return "N/A"

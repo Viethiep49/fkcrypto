@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 import structlog
 
+from src.agents.alpha_seeker import AlphaSeekerAgent
 from src.agents.analyst import TechnicalAnalystAgent
 from src.agents.decision_engine import DecisionEngine
 from src.agents.market_monitor import MarketMonitorAgent
@@ -20,6 +21,7 @@ from src.execution.service import ExecutionService
 from src.freqtrade_client.client import FreqtradeClient
 from src.gateway.graph import create_app
 from src.gateway.nodes import (
+    make_alpha_seeker_node,
     make_analyst_node,
     make_decision_node,
     make_execution_node,
@@ -52,6 +54,7 @@ class FKCryptoApp:
         self._market_monitor: MarketMonitorAgent | None = None
         self._analyst: TechnicalAnalystAgent | None = None
         self._sentiment: NewsSentimentAgent | None = None
+        self._alpha_seeker: AlphaSeekerAgent | None = None
         self._risk_guardian: RiskGuardianAgent | None = None
         self._decision_engine: DecisionEngine | None = None
         self._execution_service: ExecutionService | None = None
@@ -100,6 +103,12 @@ class FKCryptoApp:
         news_config["llm_gateway"] = self._llm_gateway
         self._sentiment = NewsSentimentAgent(news_config)
 
+        # Alpha Seeker
+        alpha_config = {**self.config, "pairs": pairs}
+        alpha_config["news_source"] = news_source
+        alpha_config["llm_gateway"] = self._llm_gateway
+        self._alpha_seeker = AlphaSeekerAgent(alpha_config)
+
         # Risk Guardian
         risk_config = {**self.config, "data_source": self._data_source, "pairs": pairs}
         self._risk_guardian = RiskGuardianAgent(risk_config)
@@ -143,6 +152,7 @@ class FKCryptoApp:
             "market_monitor": make_market_monitor_node(self._market_monitor),
             "analyst": make_analyst_node(self._analyst),
             "sentiment": make_sentiment_node(self._sentiment),
+            "alpha": make_alpha_seeker_node(self._alpha_seeker),
             "risk": make_risk_node(self._risk_guardian),
             "decision": make_decision_node(self._decision_engine),
             "execution": make_execution_node(self._execution_service),
@@ -296,6 +306,8 @@ class FKCryptoApp:
             await self._market_monitor.stop()
         if self._risk_guardian:
             await self._risk_guardian.stop()
+        if self._alpha_seeker:
+            await self._alpha_seeker.stop()
         if self._data_source:
             await self._data_source.stop()
         if self._freqtrade_client:
