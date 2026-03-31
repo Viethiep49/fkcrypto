@@ -9,6 +9,11 @@ import structlog
 from src.agents.base import BaseAgent
 from src.agents.reasoning import Reasoning, ReasoningFactor
 from src.agents.signal import Signal
+from src.security import (
+    SecurityMiddleware,
+    ThreatLevel,
+    sanitize_for_llm,
+)
 
 logger = structlog.get_logger()
 
@@ -62,6 +67,17 @@ class NewsSentimentAgent(BaseAgent):
         self._news_source = config.get("news_source")
         self._social_source = config.get("social_source")
         self._llm_gateway = config.get("llm_gateway")
+
+        # Security middleware
+        security_config = config.get("security", {})
+        self.security = SecurityMiddleware(
+            max_injection_alerts_per_hour=security_config.get(
+                "max_injection_alerts_per_hour", 10,
+            ),
+            auto_block_threat_level=ThreatLevel(
+                security_config.get("auto_block_threat_level", "high"),
+            ),
+        )
 
         # Sentiment weights
         self.sentiment_weights = {
@@ -129,6 +145,34 @@ class NewsSentimentAgent(BaseAgent):
                 )
 
         return all_news
+
+    def _sanitize_news(self, news_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Sanitize news items for safe LLM processing."""
+        safe_items: list[dict[str, Any]] = []
+        for item in news_items:
+            title = item.get("title", "")
+            summary = item.get("summary", "")
+
+            # Scan for injections
+            title_result = self.security.check_input(title, source="news_title")
+            if not title_result.passed:
+                self._logger.warning(
+                    "injection_detected_in_news",
+                    title=title[:80],
+                    threat_level=title_result.threat_level.value,
+                )
+                continue
+
+            # Sanitize content
+            safe_title = sanitize_for_llm(title)
+            safe_summary = sanitize_for_llm(summary)
+
+            safe_item = item.copy()
+            safe_item["title"] = safe_title
+            safe_item["summary"] = safe_summary
+            safe_items.append(safe_item)
+
+        return safe_items
 
     async def _fetch_social_data(self, symbol: str) -> dict[str, Any]:
         """Fetch social sentiment and volume data."""
@@ -313,6 +357,9 @@ class NewsSentimentAgent(BaseAgent):
         """Analyze sentiment for a single symbol."""
         # Fetch news
         news_items = await self._fetch_news(symbol)
+
+        # Sanitize news content (prompt injection protection)
+        news_items = self._sanitize_news(news_items)
 
         # Fetch social data
         social_data = await self._fetch_social_data(symbol)

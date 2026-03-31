@@ -9,12 +9,14 @@ from typing import Any
 import litellm
 import structlog
 
+from src.security import SecurityMiddleware, ThreatLevel
+
 litellm.set_verbose = False
 logger = structlog.get_logger()
 
 
 class LLMGateway:
-    """Unified LLM gateway with fallback support."""
+    """Unified LLM gateway with fallback support and input security."""
 
     def __init__(self, config: dict[str, Any]) -> None:
         llm_config = config.get("llm", {})
@@ -25,11 +27,24 @@ class LLMGateway:
         self.max_tokens = llm_config.get("max_tokens", 500)
         self.timeout = llm_config.get("timeout", 30)
         self.retries = llm_config.get("retries", 3)
+
+        # Security middleware
+        security_config = config.get("security", {})
+        self.security = SecurityMiddleware(
+            max_injection_alerts_per_hour=security_config.get(
+                "max_injection_alerts_per_hour", 10,
+            ),
+            auto_block_threat_level=ThreatLevel(
+                security_config.get("auto_block_threat_level", "high"),
+            ),
+        )
+
         logger.info(
             "llm_gateway_initialized",
             provider=self.provider,
             model=self.model,
             fallback=self.fallback_model,
+            security_enabled=True,
         )
 
     def _build_model_name(self, base_model: str) -> str:
@@ -69,12 +84,24 @@ class LLMGateway:
         temp = temperature if temperature is not None else self.temperature
         tokens = max_tokens if max_tokens is not None else self.max_tokens
 
+        # Sanitize user messages (not system prompts)
+        sanitized_messages = []
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role == "user":
+                content = self.security.wrap_llm_input(content, source="llm_user_input")
+                if not content:
+                    logger.warning("llm_input_blocked_by_security")
+                    return {"content": "[BLOCKED: Security check failed]", "usage": {}}
+            sanitized_messages.append({"role": role, "content": content})
+
         last_error: Exception | None = None
         for attempt in range(self.retries):
             try:
                 response = litellm.completion(
                     model=target_model,
-                    messages=messages,
+                    messages=sanitized_messages,
                     temperature=temp,
                     max_tokens=tokens,
                     timeout=self.timeout,
@@ -139,6 +166,12 @@ class LLMGateway:
         raise RuntimeError(f"LLM call failed after all retries and fallback: {last_error}")
 
     def classify_sentiment(self, text: str, symbol: str) -> float:
+        # Sanitize input text (external content)
+        safe_text = self.security.wrap_llm_input(text, source=f"sentiment_{symbol}")
+        if not safe_text:
+            logger.warning("sentiment_input_blocked", symbol=symbol)
+            return 0.0
+
         system_prompt = (
             "You are a crypto sentiment classifier. "
             "Analyze the given text and return ONLY a JSON object with:\n"
@@ -148,7 +181,7 @@ class LLMGateway:
         )
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Symbol: {symbol}\n\nText to analyze:\n{text}"},
+            {"role": "user", "content": f"Symbol: {symbol}\n\nText to analyze:\n{safe_text}"},
         ]
 
         result = self.chat_completion(messages, temperature=0.0, max_tokens=200)
