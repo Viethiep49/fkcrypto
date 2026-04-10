@@ -11,6 +11,7 @@ import ccxt.async_support as ccxt_async
 import structlog
 
 from src.data.base import DataSource
+from src.data.cache import MarketDataCache
 
 logger = structlog.get_logger()
 
@@ -33,6 +34,14 @@ class CCXTSource(DataSource):
         self.retry_delay = config.get("retry_delay", 1.0)
         self._exchange: ccxt_async.Exchange | None = None
         self._ws_task: asyncio.Task | None = None
+
+        redis_url = config.get("redis_url", "redis://localhost:6379/0")
+        self._cache = MarketDataCache(redis_url=redis_url)
+
+    async def start(self) -> None:
+        """Start the data source and connect to cache."""
+        await super().start()
+        await self._cache.connect()
 
     def _get_exchange_config(self) -> dict[str, Any]:
         config = {
@@ -87,6 +96,12 @@ class CCXTSource(DataSource):
         timeframe: str = "1h",
         limit: int = 100,
     ) -> list[dict[str, Any]]:
+        cache_key = f"ohlcv:{self.exchange_name}:{symbol}:{timeframe}:{limit}"
+        cached_data = await self._cache.get(cache_key)
+        if cached_data:
+            logger.debug("ohlcv_cache_hit", symbol=symbol, timeframe=timeframe)
+            return cached_data
+
         exchange = await self._get_exchange()
 
         async def _fetch():
@@ -104,10 +119,17 @@ class CCXTSource(DataSource):
             ]
 
         result = await self._retry(_fetch)
+        await self._cache.set(cache_key, result, ttl=60)
         logger.debug("ohlcv_fetched", symbol=symbol, timeframe=timeframe, count=len(result))
         return result
 
     async def get_ticker(self, symbol: str) -> dict[str, Any]:
+        cache_key = f"ticker:{self.exchange_name}:{symbol}"
+        cached_data = await self._cache.get(cache_key)
+        if cached_data:
+            logger.debug("ticker_cache_hit", symbol=symbol)
+            return cached_data
+
         exchange = await self._get_exchange()
 
         async def _fetch():
@@ -124,6 +146,7 @@ class CCXTSource(DataSource):
             }
 
         result = await self._retry(_fetch)
+        await self._cache.set(cache_key, result, ttl=10)
         logger.debug("ticker_fetched", symbol=symbol, last=result.get("last"))
         return result
 
@@ -205,6 +228,7 @@ class CCXTSource(DataSource):
 
     async def stop(self) -> None:
         await self.stop_ws()
+        await self._cache.close()
         if self._exchange is not None:
             try:
                 await self._exchange.close()
