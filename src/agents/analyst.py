@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import math
+import pandas as pd
+import ta
+import numpy as np
 from pathlib import Path
 from typing import Any
 
@@ -143,320 +146,106 @@ class TechnicalAnalystAgent(BaseAgent):
 
     # ── Indicator computation ──────────────────────────────────────────────
 
-    def _compute_ema(self, values: list[float], period: int) -> list[float]:
-        """Compute Exponential Moving Average."""
-        if len(values) < period:
-            return []
-        multiplier = 2.0 / (period + 1)
-        ema_values: list[float] = []
-        # Start with SMA
-        sma = sum(values[:period]) / period
-        ema_values.append(sma)
-        for price in values[period:]:
-            ema = (price - ema_values[-1]) * multiplier + ema_values[-1]
-            ema_values.append(ema)
-        return ema_values
-
-    def _compute_rsi(self, values: list[float], period: int) -> list[float]:
-        """Compute Relative Strength Index."""
-        if len(values) < period + 1:
-            return []
-        deltas = [values[i] - values[i - 1] for i in range(1, len(values))]
-        gains = [d if d > 0 else 0.0 for d in deltas]
-        losses = [-d if d < 0 else 0.0 for d in deltas]
-
-        avg_gain = sum(gains[:period]) / period
-        avg_loss = sum(losses[:period]) / period
-
-        rsi_values: list[float] = []
-        if avg_loss == 0:
-            rsi_values.append(100.0)
-        else:
-            rs = avg_gain / avg_loss
-            rsi_values.append(100.0 - (100.0 / (1.0 + rs)))
-
-        for i in range(period, len(gains)):
-            avg_gain = (avg_gain * (period - 1) + gains[i]) / period
-            avg_loss = (avg_loss * (period - 1) + losses[i]) / period
-            if avg_loss == 0:
-                rsi_values.append(100.0)
-            else:
-                rs = avg_gain / avg_loss
-                rsi_values.append(100.0 - (100.0 / (1.0 + rs)))
-        return rsi_values
-
-    def _compute_macd(
-        self,
-        values: list[float],
-        fast: int,
-        slow: int,
-        signal_period: int,
-    ) -> tuple[list[float], list[float], list[float]]:
-        """Compute MACD line, signal line, and histogram."""
-        ema_fast = self._compute_ema(values, fast)
-        ema_slow = self._compute_ema(values, slow)
-
-        # Align lengths
-        offset = len(ema_fast) - len(ema_slow)
-        if offset > 0:
-            ema_fast = ema_fast[offset:]
-        macd_line = [f - s for f, s in zip(ema_fast, ema_slow)]
-
-        if len(macd_line) < signal_period:
-            return [], [], []
-
-        signal_line = self._compute_ema(macd_line, signal_period)
-        offset2 = len(macd_line) - len(signal_line)
-        histogram = [macd_line[i + offset2] - s for i, s in enumerate(signal_line)]
-
-        return macd_line, signal_line, histogram
-
-    def _compute_bollinger_bands(
-        self,
-        values: list[float],
-        period: int,
-        std_dev: float,
-    ) -> tuple[list[float], list[float], list[float]]:
-        """Compute Bollinger Bands (upper, middle, lower)."""
-        if len(values) < period:
-            return [], [], []
-
-        upper, middle, lower = [], [], []
-        for i in range(period - 1, len(values)):
-            window = values[i - period + 1 : i + 1]
-            sma = sum(window) / period
-            variance = sum((v - sma) ** 2 for v in window) / period
-            std = math.sqrt(variance)
-            upper.append(sma + std_dev * std)
-            middle.append(sma)
-            lower.append(sma - std_dev * std)
-        return upper, middle, lower
-
-    def _compute_atr(
-        self,
-        highs: list[float],
-        lows: list[float],
-        closes: list[float],
-        period: int,
-    ) -> list[float]:
-        """Compute Average True Range."""
-        if len(highs) < period + 1:
-            return []
-
-        true_ranges: list[float] = []
-        for i in range(1, len(highs)):
-            tr = max(
-                highs[i] - lows[i],
-                abs(highs[i] - closes[i - 1]),
-                abs(lows[i] - closes[i - 1]),
-            )
-            true_ranges.append(tr)
-
-        if len(true_ranges) < period:
-            return []
-
-        atr_values = [sum(true_ranges[:period]) / period]
-        for i in range(period, len(true_ranges)):
-            atr_values.append((atr_values[-1] * (period - 1) + true_ranges[i]) / period)
-        return atr_values
-
-    def _compute_stochastic(
-        self,
-        highs: list[float],
-        lows: list[float],
-        closes: list[float],
-        k_period: int,
-        d_period: int,
-    ) -> tuple[list[float], list[float]]:
-        """Compute Stochastic Oscillator (%K and %D)."""
-        if len(closes) < k_period:
-            return [], []
-
-        k_values: list[float] = []
-        for i in range(k_period - 1, len(closes)):
-            window_high = max(highs[i - k_period + 1 : i + 1])
-            window_low = min(lows[i - k_period + 1 : i + 1])
-            if window_high == window_low:
-                k_values.append(50.0)
-            else:
-                k_values.append(((closes[i] - window_low) / (window_high - window_low)) * 100.0)
-
-        if len(k_values) < d_period:
-            return k_values, []
-
-        d_values = self._compute_ema(k_values, d_period)
-        return k_values, d_values
-
-    def _compute_adx(
-        self,
-        highs: list[float],
-        lows: list[float],
-        closes: list[float],
-        period: int,
-    ) -> list[float]:
-        """Compute Average Directional Index."""
-        if len(highs) < period + 1:
-            return []
-
-        plus_dm: list[float] = []
-        minus_dm: list[float] = []
-        trs: list[float] = []
-
-        for i in range(1, len(highs)):
-            high_diff = highs[i] - highs[i - 1]
-            low_diff = lows[i - 1] - lows[i]
-            tr = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
-            trs.append(tr)
-
-            if high_diff > low_diff and high_diff > 0:
-                plus_dm.append(high_diff)
-            else:
-                plus_dm.append(0.0)
-
-            if low_diff > high_diff and low_diff > 0:
-                minus_dm.append(low_diff)
-            else:
-                minus_dm.append(0.0)
-
-        if len(trs) < period:
-            return []
-
-        smoothed_tr = sum(trs[:period])
-        smoothed_plus = sum(plus_dm[:period])
-        smoothed_minus = sum(minus_dm[:period])
-
-        adx_values: list[float] = []
-
-        for i in range(period, len(trs)):
-            smoothed_tr = smoothed_tr - (smoothed_tr / period) + trs[i]
-            smoothed_plus = smoothed_plus - (smoothed_plus / period) + plus_dm[i]
-            smoothed_minus = smoothed_minus - (smoothed_minus / period) + minus_dm[i]
-
-            if smoothed_tr == 0:
-                adx_values.append(0.0)
-                continue
-
-            plus_di = (smoothed_plus / smoothed_tr) * 100
-            minus_di = (smoothed_minus / smoothed_tr) * 100
-
-            if plus_di + minus_di == 0:
-                dx = 0.0
-            else:
-                dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
-
-            adx_values.append(dx)
-
-        # Smooth ADX
-        if len(adx_values) < period:
-            return adx_values
-
-        smoothed_adx = [sum(adx_values[:period]) / period]
-        for i in range(period, len(adx_values)):
-            smoothed_adx.append((smoothed_adx[-1] * (period - 1) + adx_values[i]) / period)
-        return smoothed_adx
-
-    def _compute_donchian(
-        self,
-        highs: list[float],
-        lows: list[float],
-        period: int,
-    ) -> tuple[list[float], list[float], list[float]]:
-        """Compute Donchian Channel (upper, middle, lower)."""
-        if len(highs) < period:
-            return [], [], []
-
-        upper, middle, lower = [], [], []
-        for i in range(period - 1, len(highs)):
-            h = max(highs[i - period + 1 : i + 1])
-            l = min(lows[i - period + 1 : i + 1])
-            upper.append(h)
-            middle.append((h + l) / 2)
-            lower.append(l)
-        return upper, middle, lower
-
     def _compute_indicators(self, candles: list[dict[str, Any]]) -> _IndicatorState:
-        """Compute all indicators from OHLCV candle data."""
+        """Compute all indicators from OHLCV candle data using pandas and ta."""
         state = _IndicatorState()
 
         if len(candles) < 50:
             self._logger.warning("insufficient_candles", count=len(candles), needed=50)
             return state
 
-        closes = [c["close"] for c in candles]
-        highs = [c["high"] for c in candles]
-        lows = [c["low"] for c in candles]
-        volumes = [c["volume"] for c in candles]
-
-        state.current_price = closes[-1]
-        state.current_volume = volumes[-1]
+        df = pd.DataFrame(candles)
+        
+        state.current_price = float(df["close"].iloc[-1])
+        state.current_volume = float(df["volume"].iloc[-1])
 
         # RSI
-        rsi_values = self._compute_rsi(closes, self.rsi_period)
-        if rsi_values:
-            state.rsi = rsi_values[-1]
+        try:
+            rsi_indicator = ta.momentum.RSIIndicator(close=df["close"], window=self.rsi_period)
+            state.rsi = float(rsi_indicator.rsi().iloc[-1])
+        except Exception:
+            pass
 
         # MACD
-        macd_line, signal_line, histogram = self._compute_macd(
-            closes, self.macd_fast, self.macd_slow, self.macd_signal_period
-        )
-        if macd_line:
-            state.macd_line = macd_line[-1]
-            state.macd_histogram = histogram[-1] if histogram else 0.0
-            if len(macd_line) >= 2:
-                state.macd_signal = signal_line[-1] if signal_line else 0.0
+        try:
+            macd = ta.trend.MACD(
+                close=df["close"], 
+                window_fast=self.macd_fast, 
+                window_slow=self.macd_slow, 
+                window_sign=self.macd_signal_period
+            )
+            state.macd_line = float(macd.macd().iloc[-1])
+            state.macd_signal = float(macd.macd_signal().iloc[-1])
+            state.macd_histogram = float(macd.macd_diff().iloc[-1])
+        except Exception:
+            pass
 
         # EMAs
-        ema_fast_values = self._compute_ema(closes, self.ema_fast)
-        ema_slow_values = self._compute_ema(closes, self.ema_slow)
-        ema_200_values = self._compute_ema(closes, 200)
-
-        if ema_fast_values:
-            state.ema_fast = ema_fast_values[-1]
-        if ema_slow_values:
-            state.ema_slow = ema_slow_values[-1]
-        if ema_200_values:
-            state.ema_200 = ema_200_values[-1]
+        try:
+            state.ema_fast = float(ta.trend.EMAIndicator(close=df["close"], window=self.ema_fast).ema_indicator().iloc[-1])
+            state.ema_slow = float(ta.trend.EMAIndicator(close=df["close"], window=self.ema_slow).ema_indicator().iloc[-1])
+            state.ema_200 = float(ta.trend.EMAIndicator(close=df["close"], window=200).ema_indicator().iloc[-1])
+        except Exception:
+            pass
 
         # Bollinger Bands
-        bb_upper, bb_middle, bb_lower = self._compute_bollinger_bands(
-            closes, self.bb_period, self.bb_std
-        )
-        if bb_upper:
-            state.bb_upper = bb_upper[-1]
-            state.bb_middle = bb_middle[-1]
-            state.bb_lower = bb_lower[-1]
+        try:
+            bb = ta.volatility.BollingerBands(close=df["close"], window=self.bb_period, window_dev=self.bb_std)
+            state.bb_upper = float(bb.bollinger_hband().iloc[-1])
+            state.bb_middle = float(bb.bollinger_mavg().iloc[-1])
+            state.bb_lower = float(bb.bollinger_lband().iloc[-1])
+        except Exception:
+            pass
 
         # ATR
-        atr_values = self._compute_atr(highs, lows, closes, self.atr_period)
-        if atr_values:
-            state.atr = atr_values[-1]
+        try:
+            atr = ta.volatility.AverageTrueRange(
+                high=df["high"], low=df["low"], close=df["close"], window=self.atr_period
+            )
+            state.atr = float(atr.average_true_range().iloc[-1])
+        except Exception:
+            pass
 
         # Volume SMA
-        vol_sma_values = self._compute_ema(volumes, self.volume_sma_period)
-        if vol_sma_values:
-            state.volume_sma = vol_sma_values[-1]
+        try:
+            state.volume_sma = float(df["volume"].rolling(window=self.volume_sma_period).mean().iloc[-1])
+        except Exception:
+            pass
 
         # Stochastic
-        stoch_k, stoch_d = self._compute_stochastic(
-            highs, lows, closes, self.stoch_k_period, self.stoch_d_period
-        )
-        if stoch_k:
-            state.stoch_k = stoch_k[-1]
-            state.stoch_d = stoch_d[-1] if stoch_d else None
+        try:
+            stoch = ta.momentum.StochasticOscillator(
+                high=df["high"], low=df["low"], close=df["close"], window=self.stoch_k_period, smooth_window=self.stoch_d_period
+            )
+            state.stoch_k = float(stoch.stoch().iloc[-1])
+            state.stoch_d = float(stoch.stoch_signal().iloc[-1])
+        except Exception:
+            pass
 
         # ADX
-        adx_values = self._compute_adx(highs, lows, closes, self.adx_period)
-        if adx_values:
-            state.adx = adx_values[-1]
+        try:
+            adx = ta.trend.ADXIndicator(
+                high=df["high"], low=df["low"], close=df["close"], window=self.adx_period
+            )
+            state.adx = float(adx.adx().iloc[-1])
+        except Exception:
+            pass
 
         # Donchian Channel
-        dc_upper, dc_middle, dc_lower = self._compute_donchian(
-            highs, lows, self.donchian_period
-        )
-        if dc_upper:
-            state.donchian_upper = dc_upper[-1]
-            state.donchian_middle = dc_middle[-1]
-            state.donchian_lower = dc_lower[-1]
+        try:
+            dc = ta.volatility.DonchianChannel(
+                high=df["high"], low=df["low"], close=df["close"], window=self.donchian_period
+            )
+            state.donchian_upper = float(dc.donchian_channel_hband().iloc[-1])
+            state.donchian_middle = float(dc.donchian_channel_mband().iloc[-1])
+            state.donchian_lower = float(dc.donchian_channel_lband().iloc[-1])
+        except Exception:
+            pass
+
+        # Handle nan values
+        for key, value in state.__dict__.items():
+            if value is not None and (pd.isna(value) or math.isnan(value)):
+                setattr(state, key, None)
 
         return state
 
