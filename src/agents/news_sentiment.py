@@ -9,6 +9,7 @@ import structlog
 from src.agents.base import BaseAgent
 from src.agents.reasoning import Reasoning, ReasoningFactor
 from src.agents.signal import Signal
+from src.data.vector_db import InMemoryNewsDB
 from src.security import (
     SecurityMiddleware,
     ThreatLevel,
@@ -67,6 +68,10 @@ class NewsSentimentAgent(BaseAgent):
         self._news_source = config.get("news_source")
         self._social_source = config.get("social_source")
         self._llm_gateway = config.get("llm_gateway")
+        
+        # RAG Vector DB
+        self._vector_db = InMemoryNewsDB()
+        self._seed_historical_data()
 
         # Security middleware
         security_config = config.get("security", {})
@@ -85,6 +90,18 @@ class NewsSentimentAgent(BaseAgent):
             "social_volume": 0.20,
             "fear_greed": 0.15,
         }
+
+    def _seed_historical_data(self) -> None:
+        """Seed historical data to provide RAG context for the LLM."""
+        historical_events = [
+            {"text": "Bitcoin ETF approved by SEC, causing a massive surge in institutional buying and price rally.", "metadata": {"sentiment": 0.9, "impact": "Extremely Bullish", "date": "2024-01-10"}},
+            {"text": "Major crypto exchange hacked, millions stolen, causing market panic and flash crash.", "metadata": {"sentiment": -0.9, "impact": "Extremely Bearish", "date": "2022-11-15"}},
+            {"text": "Federal Reserve raises interest rates to combat inflation, causing crypto markets to dip.", "metadata": {"sentiment": -0.6, "impact": "Bearish", "date": "2023-05-03"}},
+            {"text": "Ethereum completes major network upgrade successfully, reducing gas fees.", "metadata": {"sentiment": 0.7, "impact": "Bullish", "date": "2024-03-13"}},
+            {"text": "China bans cryptocurrency mining and trading, leading to a massive hash rate drop.", "metadata": {"sentiment": -0.8, "impact": "Bearish", "date": "2021-05-19"}},
+        ]
+        for event in historical_events:
+            self._vector_db.add_news(event["text"], event["metadata"])
 
     def _build_news_query(self, symbol: str) -> str:
         """Build a search query for a given symbol."""
@@ -222,6 +239,19 @@ class NewsSentimentAgent(BaseAgent):
         if not self._llm_gateway:
             return 0.0, 0.0
 
+        # RAG: Retrieve similar historical events for context
+        query = " ".join([item.get("title", "") for item in news_items[:3]])
+        similar_events = self._vector_db.search_similar(query, k=2)
+        
+        rag_context = ""
+        if similar_events:
+            rag_context = "Historical Similar Events for Context:\n"
+            for ev in similar_events:
+                sentiment_val = ev['metadata'].get('sentiment', 'Unknown')
+                impact = ev['metadata'].get('impact', 'Unknown')
+                rag_context += f"- Past event: '{ev['text']}' had sentiment {sentiment_val} ({impact})\n"
+            rag_context += "\n"
+
         # Format news for LLM
         news_text = "\n".join(
             f"- {item.get('title', '')}" for item in news_items[:20]
@@ -231,7 +261,8 @@ class NewsSentimentAgent(BaseAgent):
             f"You are a crypto market sentiment analyst. Analyze the following "
             f"news and social media content for {symbol} and return a structured "
             f"sentiment assessment.\n\n"
-            f"Content:\n{news_text}\n\n"
+            f"{rag_context}"
+            f"Current Content:\n{news_text}\n\n"
             f"Return ONLY a JSON object with this structure:\n"
             f'{{"sentiment_score": <float -1.0 to 1.0>, "confidence": <float 0.0 to 1.0>, '
             f'"key_factors": ["factor1", "factor2"], "summary": "<max 100 chars>"}}\n\n'
