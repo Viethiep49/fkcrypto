@@ -104,6 +104,7 @@ class AlphaSeekerAgent(BaseAgent):
         self.exchange_news_enabled = sources_cfg.get("exchange_news", {}).get("enabled", True)
         self.whale_alert_enabled = sources_cfg.get("whale_alert", {}).get("enabled", False)
         self.influencer_enabled = sources_cfg.get("influencer", {}).get("enabled", False)
+        self.onchain_enabled = sources_cfg.get("onchain", {}).get("enabled", False)
 
         # API keys
         self.whale_alert_api_key = sources_cfg.get("whale_alert", {}).get("api_key", "")
@@ -126,6 +127,7 @@ class AlphaSeekerAgent(BaseAgent):
 
         # Data sources (injected)
         self._news_source = config.get("news_source")
+        self._onchain_source = config.get("onchain_source")
 
         # Tracking
         self._seen_events: set[str] = set()
@@ -292,6 +294,36 @@ class AlphaSeekerAgent(BaseAgent):
                                 ))
         except Exception as exc:
             self._logger.error("influencer_signals_fetch_failed", error=str(exc))
+
+        return events
+
+    async def _fetch_onchain_metrics(self) -> list[AlphaEvent]:
+        """Fetch on-chain metrics like exchange netflow."""
+        events: list[AlphaEvent] = []
+        if not self.onchain_enabled or not self._onchain_source:
+            return events
+
+        try:
+            for token in self.watch_tokens:
+                data = await self._onchain_source.get_exchange_netflow(token)
+                signal = data.get("signal", "neutral")
+                
+                if signal in ("bullish", "strong_bullish", "bearish", "strong_bearish"):
+                    priority = EVENT_PRIORITY_HIGH if "strong" in signal else EVENT_PRIORITY_MEDIUM
+                    netflow = data.get("netflow_usd", 0)
+                    direction = "withdrawn from" if netflow < 0 else "deposited to"
+                    
+                    events.append(AlphaEvent(
+                        event_type="onchain_netflow",
+                        token=token,
+                        title=f"Large On-chain Flow: {token}",
+                        description=f"${abs(netflow):,.0f} {direction} exchanges",
+                        priority=priority,
+                        source="onchain",
+                        metadata=data
+                    ))
+        except Exception as exc:
+            self._logger.error("onchain_metrics_fetch_failed", error=str(exc))
 
         return events
 
@@ -470,6 +502,12 @@ class AlphaSeekerAgent(BaseAgent):
                 return "buy"
         elif event.event_type == "influencer":
             return "buy"
+        elif event.event_type == "onchain_netflow":
+            signal = event.metadata.get("signal", "neutral")
+            if "bullish" in signal:
+                return "buy"
+            elif "bearish" in signal:
+                return "sell"
 
         return "hold"
 
@@ -523,6 +561,7 @@ class AlphaSeekerAgent(BaseAgent):
             "regulation": "Tin quy định/pháp lý",
             "whale_movement": "Cá voi di chuyển",
             "influencer": "KOL ảnh hưởng",
+            "onchain_netflow": "Dòng tiền On-chain",
         }
         event_label = event_type_labels.get(event.event_type, event.event_type)
 
@@ -568,6 +607,14 @@ class AlphaSeekerAgent(BaseAgent):
                 impact=0.1,
                 metadata={"influencer": influencer, "likes": likes},
             ))
+        elif event.event_type == "onchain_netflow":
+            netflow = event.metadata.get("netflow_usd", 0)
+            reasoning.add_factor(ReasoningFactor(
+                type="onchain",
+                description=f"Netflow: ${netflow:,.0f}",
+                impact=0.2 if action == "buy" else -0.2 if action == "sell" else 0.0,
+                metadata={"netflow_usd": netflow},
+            ))
 
         return reasoning
 
@@ -589,6 +636,8 @@ class AlphaSeekerAgent(BaseAgent):
             tasks.append(self._fetch_whale_alerts())
         if self.influencer_enabled:
             tasks.append(self._fetch_influencer_signals())
+        if self.onchain_enabled:
+            tasks.append(self._fetch_onchain_metrics())
         tasks.append(self._detect_breaking_news())
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -669,4 +718,3 @@ class AlphaSeekerAgent(BaseAgent):
                 await self._monitor_task
             except asyncio.CancelledError:
                 pass
-        await super().stop()
